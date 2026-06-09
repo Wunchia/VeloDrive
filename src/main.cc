@@ -23,8 +23,8 @@ int main()
 
     // server.start();
 
-    if (server.start(8888) == 0) {
-        // server.list_routes();
+    if (server.start(8848) == 0) {
+        server.list_routes();
         waitGroup.wait();
         server.stop();
     } else {

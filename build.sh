@@ -2,6 +2,6 @@ if [ ! -d build ]; then
   mkdir build
 fi
 cd build
-cmake ..
-make 
+cmake .. -DBUILD_TESTS=OFF.
+make
 cd ..

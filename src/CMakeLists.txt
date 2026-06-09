@@ -1,6 +1,8 @@
 # 静态库：所有业务代码
 add_library(velodrive STATIC
     server/CloudDiskServer.cc
+    account/AccountHandler.cc
+    file/FileHandler.cc
     crypto/CryptoUtil.cc
 )
 
