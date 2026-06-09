@@ -96,7 +96,7 @@ void FileHandler::list_files(const HttpReq *req,HttpResp *resp){
             f["filename"]=row[1].as_string();
             f["size"]=row[3].as_int();
             f["createdAt"]=row[4].as_string();
-            f["updateAt"]=row[5].as_string();
+            f["updatedAt"]=row[5].as_string();
             files.push_back(f);
             row.clear();
         }
