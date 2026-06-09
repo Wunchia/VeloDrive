@@ -136,7 +136,7 @@ void FileHandler::upload_file(const HttpReq *req,HttpResp *resp){
 
     //存盘
     string basename=STORAGE_DIR+"/"+hashcode;
-    resp->Save(basename,file_data,"Save "+filename+" success.\n");
+    resp->Save(basename,file_data);
 
     //插入数据库
     string sql= "INSERT INTO tbl_file (uid, filename, hashcode, size) VALUES ("
