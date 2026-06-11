@@ -1,4 +1,5 @@
 #include "CloudDiskServer.h"
+#include "OssManager.h"
 #include <iostream>
 #include <signal.h>
 
@@ -16,12 +17,22 @@ int main()
     signal(SIGINT, sig_handler);
     srand(time(NULL)); // 设置随机种子
 
+    char* Access_Key_ID=getenv("ALIBABA_CLOUD_ACCESS_KEY_ID");
+    char* Access_Key_Secret=getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET");
+    string keyId=Access_Key_ID?Access_Key_ID:"";
+    string keySecret=Access_Key_Secret?Access_Key_Secret:"";
+
+    //初始化oss单例
+    OssManager::getInstance().init(
+        "oss-cn-wuhan-lr.aliyuncs.com",
+        keyId,keySecret,
+        "velo-use-20260611",
+        "cn-wuhan");
+
     CloudDiskServer server;
 
     // 注册路由
     server.register_routes();
-
-    // server.start();
 
     if (server.start(8848) == 0) {
         server.list_routes();
@@ -30,4 +41,8 @@ int main()
     } else {
         cerr << "Error: Server start FAILED!" << endl;
     }
+
+    //销毁oss单例
+    OssManager::getInstance().shutdown();
+
 }

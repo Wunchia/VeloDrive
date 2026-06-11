@@ -3,6 +3,7 @@ add_library(velodrive STATIC
     server/CloudDiskServer.cc
     account/AccountHandler.cc
     file/FileHandler.cc
+    file/OssManager.cc
     crypto/CryptoUtil.cc
 )
 
@@ -17,6 +18,9 @@ target_link_libraries(velodrive PUBLIC
     ssl
     jwt
     wfrest
+    alibabacloud-oss-cpp-sdk
+    curl
+    pthread
 )
 
 # 可执行程序

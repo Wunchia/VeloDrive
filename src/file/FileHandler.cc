@@ -1,5 +1,6 @@
 #include "FileHandler.h"
 #include "CryptoUtil.h"
+#include "OssManager.h"
 #include <nlohmann/json.hpp>
 #include <vector>
 #include <wfrest/HttpContent.h>
@@ -18,7 +19,7 @@ using json=nlohmann::json;
 
 //------配置常量------
 static const string DB_URL="mysql://root:123456@localhost/VeloDrive";
-static const string STORAGE_DIR="./storage";
+// static const string STORAGE_DIR="./storage";
 
 //------辅助函数------
 static void send_error(HttpResp* resp,int code,const string &msg){
@@ -65,14 +66,14 @@ static int verify_token(const HttpReq *req,HttpResp *resp){
 }
 
 // 验证存储目录存在
-static bool ensure_storage_dir(){
-    struct stat st;
-    if(stat(STORAGE_DIR.c_str(),&st)!=0){
-        //目录的权限设置为 0755 rwx r-x r-x
-        return mkdir(STORAGE_DIR.c_str(),0755)==0;
-    }
-    return true;
-}
+// static bool ensure_storage_dir(){
+//     struct stat st;
+//     if(stat(STORAGE_DIR.c_str(),&st)!=0){
+//         //目录的权限设置为 0755 rwx r-x r-x
+//         return mkdir(STORAGE_DIR.c_str(),0755)==0;
+//     }
+//     return true;
+// }
 
 // ==========================================
 //            陈列 GET /api/v1/files
@@ -132,11 +133,16 @@ void FileHandler::upload_file(const HttpReq *req,HttpResp *resp){
     string hashcode=CryptoUtil::generate_hashcode(file_data.c_str(), file_data.size());
 
     //确保存储目录存在
-    ensure_storage_dir();
+    // ensure_storage_dir();
 
     //存盘
-    string basename=STORAGE_DIR+"/"+hashcode;
-    resp->Save(basename,file_data);
+    // string basename=STORAGE_DIR+"/"+hashcode;
+    // resp->Save(basename,file_data);
+    bool isPutObject=OssManager::getInstance().putObject(hashcode,file_data);
+    if(!isPutObject){
+        send_error(resp, 500, "上传云存储失败");
+        return;
+    }
 
     //插入数据库
     string sql= "INSERT INTO tbl_file (uid, filename, hashcode, size) VALUES ("
@@ -195,6 +201,12 @@ void FileHandler::download_file(const HttpReq *req,HttpResp *resp){
         }
 
         //读盘
-        resp->File(STORAGE_DIR+"/"+db_hash);
+        // resp->File(STORAGE_DIR+"/"+db_hash);
+        string content=OssManager::getInstance().getObject(db_hash);
+        if(content.empty()){
+            send_error(resp, 500, "云文件下载失败");
+            return;
+        }
+        resp->String(content);
     });
 }
