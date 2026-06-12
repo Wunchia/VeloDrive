@@ -4,6 +4,7 @@ add_library(velodrive STATIC
     account/AccountHandler.cc
     file/FileHandler.cc
     file/OssManager.cc
+    messageQueue/MqManager.cc
     crypto/CryptoUtil.cc
 )
 
@@ -20,6 +21,7 @@ target_link_libraries(velodrive PUBLIC
     wfrest
     alibabacloud-oss-cpp-sdk
     curl
+    SimpleAmqpClient
     pthread
 )
 
@@ -29,3 +31,9 @@ add_executable(server
 )
 
 target_link_libraries(server PRIVATE velodrive)
+
+add_executable(consumer
+    messageQueue/consumer_main.cc
+)
+target_link_libraries(consumer PRIVATE velodrive
+    alibabacloud-oss-cpp-sdk curl crypto ssl)

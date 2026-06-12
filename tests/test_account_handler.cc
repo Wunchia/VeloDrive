@@ -42,7 +42,7 @@ static string curl(const string &method,
                    const string &body = "")
 {
     string url = "http://localhost:" + to_string(TEST_PORT) + path;
-    string cmd = "curl -s -w '\\n%{http_code}' -X " + method
+    string cmd = "curl -s --noproxy '*' -w '\\n%{http_code}' -X " + method
                + " " + headers + " '" + url + "' 2>&1";
     if (!body.empty())
         cmd += " -d '" + body + "'";

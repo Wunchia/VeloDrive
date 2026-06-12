@@ -2,6 +2,7 @@
 add_executable(unit_tests
     test_crypto_util.cc
     test_account_handler.cc
+    test_file_handler.cc
 )
 
 target_include_directories(unit_tests PRIVATE

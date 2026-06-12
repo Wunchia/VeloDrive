@@ -1,6 +1,7 @@
 #include "FileHandler.h"
 #include "CryptoUtil.h"
 #include "OssManager.h"
+#include "MqManager.h"
 #include <nlohmann/json.hpp>
 #include <vector>
 #include <wfrest/HttpContent.h>
@@ -19,7 +20,7 @@ using json=nlohmann::json;
 
 //------配置常量------
 static const string DB_URL="mysql://root:123456@localhost/VeloDrive";
-// static const string STORAGE_DIR="./storage";
+static const string STORAGE_DIR="./storage";
 
 //------辅助函数------
 static void send_error(HttpResp* resp,int code,const string &msg){
@@ -66,14 +67,14 @@ static int verify_token(const HttpReq *req,HttpResp *resp){
 }
 
 // 验证存储目录存在
-// static bool ensure_storage_dir(){
-//     struct stat st;
-//     if(stat(STORAGE_DIR.c_str(),&st)!=0){
-//         //目录的权限设置为 0755 rwx r-x r-x
-//         return mkdir(STORAGE_DIR.c_str(),0755)==0;
-//     }
-//     return true;
-// }
+static bool ensure_storage_dir(){
+    struct stat st;
+    if(stat(STORAGE_DIR.c_str(),&st)!=0){
+        //目录的权限设置为 0755 rwx r-x r-x
+        return mkdir(STORAGE_DIR.c_str(),0755)==0;
+    }
+    return true;
+}
 
 // ==========================================
 //            陈列 GET /api/v1/files
@@ -122,8 +123,13 @@ void FileHandler::upload_file(const HttpReq *req,HttpResp *resp){
 
     //解析请求体 解析 multipart 表单 拿到文件名和文件数据
     const Form &form=req->form();
-    string filename=form.at("file").first;
-    string file_data=form.at("file").second;
+    auto it=form.find("file");
+    if(it==form.end()){
+        send_error(resp, 400, "请求格式有误");
+        return;
+    }
+    string filename=it->second.first;
+    string file_data=it->second.second;
     if(filename.empty()||file_data.empty()){
         send_error(resp, 400, "请求格式有误");
         return;
@@ -133,15 +139,23 @@ void FileHandler::upload_file(const HttpReq *req,HttpResp *resp){
     string hashcode=CryptoUtil::generate_hashcode(file_data.c_str(), file_data.size());
 
     //确保存储目录存在
-    // ensure_storage_dir();
+    ensure_storage_dir();
 
     //存盘
-    // string basename=STORAGE_DIR+"/"+hashcode;
-    // resp->Save(basename,file_data);
-    bool isPutObject=OssManager::getInstance().putObject(hashcode,file_data);
-    if(!isPutObject){
-        send_error(resp, 500, "上传云存储失败");
-        return;
+    string basename=STORAGE_DIR+"/"+hashcode;
+    resp->Save(basename,file_data);
+    // bool isPutObject=OssManager::getInstance().putObject(hashcode,file_data);
+    // if(!isPutObject){
+    //     send_error(resp, 500, "上传云存储失败");
+    //     return;
+    // }
+
+    // 通知消费者备份到OSS （异步，不等结果）
+    json mq_msg;
+    mq_msg["hashcode"]=hashcode;
+    bool ok=MqManager::getInstance().publish("velo.direct", "file.upload", mq_msg.dump(2));
+    if(!ok){
+        cerr<<"[FileHandler] MQ publish failed!"<<endl;
     }
 
     //插入数据库
@@ -201,12 +215,18 @@ void FileHandler::download_file(const HttpReq *req,HttpResp *resp){
         }
 
         //读盘
-        // resp->File(STORAGE_DIR+"/"+db_hash);
-        string content=OssManager::getInstance().getObject(db_hash);
-        if(content.empty()){
-            send_error(resp, 500, "云文件下载失败");
-            return;
+
+        string filepath=STORAGE_DIR+"/"+db_hash;
+        struct stat st;
+        if(stat(filepath.c_str(),&st)==0){
+            resp->File(filepath);//本地有则从本地下载
+        }else{  //本地文件损坏（丢失） 则从OSS下载
+            string content=OssManager::getInstance().getObject(db_hash);
+            if(content.empty()){
+                send_error(resp, 500, "云文件下载失败");
+                return;
+            }
+            resp->String(content);
         }
-        resp->String(content);
     });
 }
