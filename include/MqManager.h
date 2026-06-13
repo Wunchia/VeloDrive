@@ -3,7 +3,7 @@
 #include <SimpleAmqpClient/Channel.h>
 #include <SimpleAmqpClient/SimpleAmqpClient.h>
 #include <string>
-#include <memory.h>
+#include <memory>
 
 class MqManager
 {
@@ -17,7 +17,7 @@ public:
                  const std::string& body);
 
     void setupConsumer(const std::string& queue,
-        const std::string& exchange,const std::string& routingKeye);
+        const std::string& exchange,const std::string& routingKey);
     std::string consumeOne();
 
     void shutdown();

@@ -143,7 +143,16 @@ void FileHandler::upload_file(const HttpReq *req,HttpResp *resp){
 
     //存盘
     string basename=STORAGE_DIR+"/"+hashcode;
-    resp->Save(basename,file_data);
+    // 这里调用wfrest框架异步存盘，会导致竞态条件
+    // 之后的 OSS备份 可能在 本地存盘 完成前读取本地文件
+    // 导致找不到本地文件 上传云备份失败
+    // resp->Save(basename,file_data);
+    //改成 同步存盘 保证本地存盘完成后 OSS才会开始向云备份
+    ofstream ofs(basename,ios::binary);
+    ofs.write(file_data.c_str(), file_data.size());
+    ofs.close();
+
+
     // bool isPutObject=OssManager::getInstance().putObject(hashcode,file_data);
     // if(!isPutObject){
     //     send_error(resp, 500, "上传云存储失败");
@@ -226,7 +235,8 @@ void FileHandler::download_file(const HttpReq *req,HttpResp *resp){
                 send_error(resp, 500, "云文件下载失败");
                 return;
             }
-            resp->String(content);
+            resp->Save(filepath,content);//恢复本地文件
+            resp->String(content);//向用户发送下载文件
         }
     });
 }

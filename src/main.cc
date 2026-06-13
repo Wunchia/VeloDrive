@@ -48,5 +48,8 @@ int main()
 
     //销毁oss单例
     OssManager::getInstance().shutdown();
+    //销毁MQ单例
+    MqManager::getInstance().shutdown();
 
+    cout<<"[Server]: Bye ~ "<<endl;
 }
