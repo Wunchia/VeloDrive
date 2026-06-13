@@ -1,0 +1,23 @@
+syntax="proto3";
+
+service FileService{
+    rpc ListFiles(ListFilesReq) returns(ListFilesResp);
+}
+
+message ListFilesReq{
+    int32 uid=1;
+}
+
+message FileInfo{
+    int32 file_id=1;
+    string filename=2;
+    int64 size=3;
+    string created_at=4;
+    string updated_at=5;
+}
+
+message ListFilesResp{
+    int32 code=1;
+    string message=2;
+    repeated FileInfo files=3;
+}

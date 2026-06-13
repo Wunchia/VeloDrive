@@ -2,7 +2,6 @@
 #include "AccountHandler.h"
 #include "FileHandler.h"
 #include "CryptoUtil.h"
-#include "common.h"
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <wfrest/PathUtil.h>

@@ -1,11 +1,13 @@
 # 静态库：所有业务代码
 add_library(velodrive STATIC
     server/CloudDiskServer.cc
-    account/AccountHandler.cc
-    file/FileHandler.cc
-    file/OssManager.cc
-    messageQueue/MqManager.cc
+    handler/AccountHandler.cc
+    handler/FileHandler.cc
+    oss/OssManager.cc
+    mq/MqManager.cc
     crypto/CryptoUtil.cc
+    pb/auth.pb.cc
+    pb/file.pb.cc
 )
 
 # 头文件搜索路径
@@ -23,6 +25,7 @@ target_link_libraries(velodrive PUBLIC
     curl
     SimpleAmqpClient
     pthread
+    protobuf
 )
 
 # 可执行程序
@@ -33,7 +36,7 @@ add_executable(server
 target_link_libraries(server PRIVATE velodrive)
 
 add_executable(consumer
-    messageQueue/consumer_main.cc
+    mq/consumer_main.cc
 )
 target_link_libraries(consumer PRIVATE velodrive
     alibabacloud-oss-cpp-sdk curl crypto ssl)

@@ -1,0 +1,33 @@
+syntax="proto3";
+
+service AuthService{
+    rpc Register(RegisterReq) returns(RegisterResp);
+    rpc Login(LoginReq) returns(LoginResp);
+}
+
+message RegisterReq{
+    string username=1;
+    string password=2;
+    string confirm =3;
+}
+
+message RegisterResp{
+    int32 code     =1;   //0=成功 1=用户已存在 2=参数错误
+    string message =2;
+    int32 user_id  =3;
+    string username=4;
+}
+
+message LoginReq{
+    string username=1;
+    string password=2;
+}
+
+message LoginResp{
+    int32 code         =1;       //0=成功 1=密码错误 2=用户不存在
+    string message     =2;
+    string access_token=3;
+    string token_type  =4;
+    int32 user_id      =5;
+    string username    =6;
+}

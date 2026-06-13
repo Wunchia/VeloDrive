@@ -15,6 +15,7 @@ add_compile_options(-g)
 
 # 子目录
 add_subdirectory(src)
+add_subdirectory(srpc)
 
 # 测试（可选：默认开启，可通过 -DBUILD_TESTS=OFF 关闭）
 option(BUILD_TESTS "Build unit tests" ON)
