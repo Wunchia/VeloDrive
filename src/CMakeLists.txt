@@ -13,6 +13,7 @@ add_library(velodrive STATIC
 # 头文件搜索路径
 target_include_directories(velodrive PUBLIC
     ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/srpc/gen
 )
 
 # 链接依赖
@@ -26,6 +27,9 @@ target_link_libraries(velodrive PUBLIC
     SimpleAmqpClient
     pthread
     protobuf
+    srpc
+    snappy
+    lz4
 )
 
 # 可执行程序

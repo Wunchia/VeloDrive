@@ -1,6 +1,10 @@
 #include "AccountHandler.h"
 #include "CryptoUtil.h"
+#include "auth.pb.h"
+#include "auth.srpc.h"
 #include <nlohmann/json.hpp>
+#include <srpc/rpc_basic.h>
+#include <srpc/rpc_context.h>
 #include <wfrest/HttpDef.h>
 #include <wfrest/HttpMsg.h>
 #include <workflow/MySQLResult.h>
@@ -37,10 +41,10 @@ static void send_success(HttpResp *resp,int status_code,const string&msg,const j
     resp->String(body.dump(2));
 }
 
-// ======================================
-//      POST /api/v1/auth/register
-// ======================================
-void AccountHandler::register_user(const HttpReq *req,HttpResp*resp){
+// ===========================================================
+//     POST /api/v1/auth/register --> sRPC --> AuthService:8001
+// ===========================================================
+void AccountHandler::register_user(const HttpReq *req,HttpResp*resp,SeriesWork*series){
     // 1.解析请求头 校验Content-Type
     // -----可以取出字符串比较---
     // const string &ct=ContentType::to_str(req->content_type());
@@ -71,31 +75,66 @@ void AccountHandler::register_user(const HttpReq *req,HttpResp*resp){
         return;
     }
 
-    // 4.生成 盐值 和 密码hash
-    string salt=CryptoUtil::generate_salt();
-    string hash_pwd=CryptoUtil::hash_password(password,salt);
+    // 构造 protobuf 请求
+    RegisterReq pb_req;
+    pb_req.set_username(username);
+    pb_req.set_password(password);
+    pb_req.set_confirm(confirm);
 
-    // 5.拼sql
-    string sql="INSERT  INTO tbl_user (username, password, salt) VALUES ('"
-                    + username + "', '" + hash_pwd + "', '" + salt + "')";
+    // 发起异步 sRPC 调用
+    auto *client=new AuthService::SRPCClient("127.0.0.1", 8001);
+    auto *task=client->create_Register_task(
+        [resp,client](RegisterResp *pb_resp,srpc::RPCContext* ctx){
+            if(!pb_resp||ctx->get_status_code()!=srpc::RPCStatusOK){
+                send_error(resp,500,"内部服务器错误");
+                delete client;
+                return;
+            }
+            if(pb_resp->code()==0){
+                json data;
+                data["userId"]=pb_resp->user_id();
+                data["username"]=pb_resp->username();
+                send_success(resp,201,pb_resp->message(),data);
+            }else if(pb_resp->code()==1){
+                send_error(resp,409,pb_resp->message());
+            }else{
+                send_error(resp, 400, pb_resp->message());
+            }
+        });
+    task->serialize_input(&pb_req);
+    series->push_back(task);
+    auto*cleanup=WFTaskFactory::create_timer_task(0,
+        [client](WFTimerTask*){delete client;});
+    series->push_back(cleanup);
+//==========================================================
+//                  以下工作交给 AuthService : 8001
+// =========================================================
+// // 4.生成 盐值 和 密码hash
+// string salt=CryptoUtil::generate_salt();
+// string hash_pwd=CryptoUtil::hash_password(password,salt);
 
-    // 6.插入数据库 sqlTask
-    resp->MySQL(DB_URL, sql, [resp,username](protocol::MySQLResultCursor* cursor) {
-        if (cursor->get_cursor_status() == MYSQL_STATUS_OK && cursor->get_affected_rows() == 1) {
-            json data;
-            data["userId"]=cursor->get_insert_id();
-            data["username"]=username;
-            send_success(resp,201,"注册成功",data);
-        } else {
-            send_error(resp,409,"用户名已存在");
-        }
-    });
+// // 5.拼sql
+// string sql="INSERT  INTO tbl_user (username, password, salt) VALUES ('"
+//                 + username + "', '" + hash_pwd + "', '" + salt + "')";
+
+// // 6.插入数据库 sqlTask
+// resp->MySQL(DB_URL, sql, [resp,username](protocol::MySQLResultCursor* cursor) {
+//     if (cursor->get_cursor_status() == MYSQL_STATUS_OK && cursor->get_affected_rows() == 1) {
+//         json data;
+//         data["userId"]=cursor->get_insert_id();
+//         data["username"]=username;
+//         send_success(resp,201,"注册成功",data);
+//     } else {
+//         send_error(resp,409,"用户名已存在");
+//     }
+// });
+// ===========================================================
 }
 
-// ======================================
-//      POST /api/v1/auth/login
-// ======================================
-void AccountHandler::login(const HttpReq *req,HttpResp*resp){
+// =============================================================
+//      POST /api/v1/auth/login --> SRPC --> AuthService:8001
+// =============================================================
+void AccountHandler::login(const HttpReq *req,HttpResp*resp,SeriesWork*series){
     // 1.解析请求头 content-type
     if(req->content_type()!=wfrest::APPLICATION_JSON){
         send_error(resp, 400, "请求格式有误");
@@ -118,54 +157,92 @@ void AccountHandler::login(const HttpReq *req,HttpResp*resp){
         return;
     }
 
-    // 4.拼sql
-    string sql= "SELECT id, username, password, salt, created_at "
-                "FROM tbl_user WHERE username='" + username + "'";
+    // 构造 protobuf 请求
+    LoginReq pb_req;
+    pb_req.set_username(username);
+    pb_req.set_password(password);
 
-    // 5.查询数据库 sqlTask
-    resp->MySQL(DB_URL,sql,[resp,username,password](protocol::MySQLResultCursor* cursor){
-        // 没取到结果集
-        if(cursor->get_cursor_status()!=MYSQL_STATUS_GET_RESULT){
-            send_error(resp, 500, "服务器内部错误");
-            return;
-        }
-        // 取到的行数为0 SQL返回空结果集
-        vector<protocol::MySQLCell> row;
-        if(!cursor->fetch_row(row)){
-            send_error(resp, 401, "用户名或密码错误");
-            return;
-        }
+    auto *client=new AuthService::SRPCClient("127.0.0.1",8001);
+    auto *task=client->create_Login_task(
+        [resp,client](LoginResp*pb_resp,srpc::RPCContext* ctx){
+            if(!pb_resp||ctx->get_status_code()!=srpc::RPCStatusOK){
+                send_error(resp,500,"内部服务器错误");
+                delete client;
+                return;
+            }
+            if(pb_resp->code()==0){
+                json user_data;
+                user_data["userId"]=pb_resp->user_id();
+                user_data["username"]=pb_resp->username();
 
-        // 解析结果集
-        int db_id=row[0].as_int();
-        string db_username=row[1].as_string();
-        string db_password=row[2].as_string();
-        string db_salt=row[3].as_string();
-        string db_created_at=row[4].as_string();
+                json data;
+                data["accessToken"]=pb_resp->access_token();
+                data["tokenType"]=pb_resp->token_type();
+                data["user"]=user_data;
 
-        // 验证密码
-        string hash_input=CryptoUtil::hash_password(password, db_salt);
-        if(hash_input!=db_password){
-            send_error(resp, 401, "用户名或密码错误");
-            return;
-        }
-        // 生成JWT
-        User user;
-        user.id=db_id;
-        user.username=db_username;
-        user.createdAt=db_created_at;
-        string token =CryptoUtil::generate_token(user);
+                send_success(resp,200,pb_resp->message(), data);
+            }else{
+                send_error(resp,401, pb_resp->message());
+            }
+        });
+    task->serialize_input(&pb_req);
+    series->push_back(task);
+    auto*cleanup=WFTaskFactory::create_timer_task(0,
+        [client](WFTimerTask*){delete client;});
+    series->push_back(cleanup);
 
-        // 构造响应
-        json user_data;
-        user_data["userId"]=db_id;
-        user_data["username"]=db_username;
-        json data;
-        data["accessToken"]=token;
-        data["tokenType"]="Bearer";
-        data["user"]=user_data;
-        send_success(resp, 200, "登录成功", data);
-    });
+    //==================================================================
+    //                  以下交给 AuthService : 8001 去做
+    //==================================================================
+    // // 4.拼sql
+    // string sql= "SELECT id, username, password, salt, created_at "
+    //     "FROM tbl_user WHERE username='" + username + "'";
+
+    // // 5.查询数据库 sqlTask
+    // resp->MySQL(DB_URL,sql,[resp,username,password](protocol::MySQLResultCursor* cursor){
+    //     // 没取到结果集
+    //     if(cursor->get_cursor_status()!=MYSQL_STATUS_GET_RESULT){
+    //         send_error(resp, 500, "服务器内部错误");
+    //         return;
+    //     }
+    //     // 取到的行数为0 SQL返回空结果集
+    //     vector<protocol::MySQLCell> row;
+    //     if(!cursor->fetch_row(row)){
+    //         send_error(resp, 401, "用户名或密码错误");
+    //         return;
+    //     }
+
+    //     // 解析结果集
+    //     int db_id=row[0].as_int();
+    //     string db_username=row[1].as_string();
+    //     string db_password=row[2].as_string();
+    //     string db_salt=row[3].as_string();
+    //     string db_created_at=row[4].as_string();
+
+    //     // 验证密码
+    //     string hash_input=CryptoUtil::hash_password(password, db_salt);
+    //     if(hash_input!=db_password){
+    //         send_error(resp, 401, "用户名或密码错误");
+    //         return;
+    //     }
+    //     // 生成JWT
+    //     User user;
+    //     user.id=db_id;
+    //     user.username=db_username;
+    //     user.createdAt=db_created_at;
+    //     string token =CryptoUtil::generate_token(user);
+
+    //     // 构造响应
+    //     json user_data;
+    //     user_data["userId"]=db_id;
+    //     user_data["username"]=db_username;
+    //     json data;
+    //     data["accessToken"]=token;
+    //     data["tokenType"]="Bearer";
+    //     data["user"]=user_data;
+    //     send_success(resp, 200, "登录成功", data);
+    // });
+    //========================================================================
 }
 
 // ======================================

@@ -2,7 +2,11 @@
 #include "CryptoUtil.h"
 #include "OssManager.h"
 #include "MqManager.h"
+#include "file.pb.h"
+#include "file.srpc.h"
 #include <nlohmann/json.hpp>
+#include <srpc/rpc_basic.h>
+#include <srpc/rpc_context.h>
 #include <vector>
 #include <wfrest/HttpContent.h>
 #include <wfrest/HttpDef.h>
@@ -12,6 +16,9 @@
 #include <sys/stat.h>
 #include <fstream>
 #include <cstdio>
+#include <workflow/WFTask.h>
+#include <workflow/WFTaskFactory.h>
+#include <workflow/Workflow.h>
 #include <workflow/mysql_types.h>
 
 using namespace std;
@@ -76,36 +83,75 @@ static bool ensure_storage_dir(){
     return true;
 }
 
-// ==========================================
-//            陈列 GET /api/v1/files
-// ==========================================
-void FileHandler::list_files(const HttpReq *req,HttpResp *resp){
+// ===============================================================
+//        GET /api/v1/files --> SRPC --> FileService : 8002
+// ===============================================================
+void FileHandler::list_files(const HttpReq *req,HttpResp *resp,SeriesWork*series){
     int uid=verify_token(req,resp);
     if(uid==-1){return;}
 
-    string sql= "SELECT id, filename, hashcode, size, created_at, last_update "
-                "FROM tbl_file WHERE uid=" + to_string(uid);
-    resp->MySQL(DB_URL,sql,[resp](protocol::MySQLResultCursor *cursor){
-        if(cursor->get_cursor_status()!=MYSQL_STATUS_GET_RESULT){
-            send_error(resp, 500, "内部服务器错误");
-            return;
-        }
-        json files=json::array();
-        vector<protocol::MySQLCell> row;
-        while(cursor->fetch_row(row)){
-            json f;
-            f["fileId"]=row[0].as_int();
-            f["filename"]=row[1].as_string();
-            f["size"]=row[3].as_int();
-            f["createdAt"]=row[4].as_string();
-            f["updatedAt"]=row[5].as_string();
-            files.push_back(f);
-            row.clear();
-        }
-        json data;
-        data["files"]=files;
-        send_success(resp, 200, "获取文件列表成功", data);
-    });
+    ListFilesReq pb_req;
+    pb_req.set_uid(uid);
+
+    auto *client=new FileService::SRPCClient("127.0.0.1",8002);
+    auto *task=client->create_ListFiles_task(
+        [resp,client](ListFilesResp*pb_resp,srpc::RPCContext*ctx){
+            if(!pb_resp||ctx->get_status_code()!=srpc::RPCStatusOK){
+                send_error(resp,500,"内部服务器错误");
+                delete client;
+                return;
+            }
+            if(pb_resp->code()==0){
+                json files=json::array();
+                for(int i=0;i<pb_resp->files_size();i++){
+                    json f;
+                    f["fileId"]    = pb_resp->files(i).file_id();
+                    f["filename"]  = pb_resp->files(i).filename();
+                    f["size"]      = pb_resp->files(i).size();
+                    f["createdAt"] = pb_resp->files(i).created_at();
+                    f["updatedAt"] = pb_resp->files(i).updated_at();
+                    files.push_back(f);
+                }
+                json data;
+                data["files"]=files;
+                send_success(resp,200,pb_resp->message(),data);
+            }else{
+                send_error(resp,500,pb_resp->message());
+            }
+        });
+    task->serialize_input(&pb_req);
+    series->push_back(task);
+    auto*cleanup=WFTaskFactory::create_timer_task(0,
+        [client](WFTimerTask*){delete client;});
+    series->push_back(cleanup);
+
+    // ==============================================================
+    //              以下工作交给 FileService
+    // ==============================================================
+    // string sql= "SELECT id, filename, hashcode, size, created_at, last_update "
+    //             "FROM tbl_file WHERE uid=" + to_string(uid);
+    // resp->MySQL(DB_URL,sql,[resp](protocol::MySQLResultCursor *cursor){
+    //     if(cursor->get_cursor_status()!=MYSQL_STATUS_GET_RESULT){
+    //         send_error(resp, 500, "内部服务器错误");
+    //         return;
+    //     }
+    //     json files=json::array();
+    //     vector<protocol::MySQLCell> row;
+    //     while(cursor->fetch_row(row)){
+    //         json f;
+    //         f["fileId"]=row[0].as_int();
+    //         f["filename"]=row[1].as_string();
+    //         f["size"]=row[3].as_int();
+    //         f["createdAt"]=row[4].as_string();
+    //         f["updatedAt"]=row[5].as_string();
+    //         files.push_back(f);
+    //         row.clear();
+    //     }
+    //     json data;
+    //     data["files"]=files;
+    //     send_success(resp, 200, "获取文件列表成功", data);
+    // });
+    //================================================================
 }
 
 // ==========================================
@@ -169,10 +215,10 @@ void FileHandler::upload_file(const HttpReq *req,HttpResp *resp){
 
     //插入数据库
     string sql= "INSERT INTO tbl_file (uid, filename, hashcode, size) VALUES ("
-                  + to_string(uid) + ", '"
-                  + filename + "', '"
-                  + hashcode + "', "
-                  + to_string(file_data.size()) + ")";
+        + to_string(uid) + ", '"
+        + filename + "', '"
+        + hashcode + "', "
+        + to_string(file_data.size()) + ")";
 
     resp->MySQL(DB_URL,sql,[resp,filename](protocol::MySQLResultCursor*cursor){
         if(cursor->get_cursor_status()==MYSQL_STATUS_OK&&cursor->get_affected_rows()==1){

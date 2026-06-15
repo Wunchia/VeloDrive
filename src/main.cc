@@ -1,6 +1,7 @@
 #include "CloudDiskServer.h"
 #include "OssManager.h"
 #include "MqManager.h"
+#include <google/protobuf/stubs/common.h>
 #include <iostream>
 #include <signal.h>
 
@@ -15,6 +16,7 @@ void sig_handler(int)
 
 int main()
 {
+    GOOGLE_PROTOBUF_VERIFY_VERSION;
     signal(SIGINT, sig_handler);
     srand(time(NULL)); // 设置随机种子
 
@@ -50,6 +52,6 @@ int main()
     OssManager::getInstance().shutdown();
     //销毁MQ单例
     MqManager::getInstance().shutdown();
-
+    google::protobuf::ShutdownProtobufLibrary();
     cout<<"[Server]: Bye ~ "<<endl;
 }
