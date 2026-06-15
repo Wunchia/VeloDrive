@@ -98,7 +98,6 @@ void FileHandler::list_files(const HttpReq *req,HttpResp *resp,SeriesWork*series
         [resp,client](ListFilesResp*pb_resp,srpc::RPCContext*ctx){
             if(!pb_resp||ctx->get_status_code()!=srpc::RPCStatusOK){
                 send_error(resp,500,"内部服务器错误");
-                delete client;
                 return;
             }
             if(pb_resp->code()==0){

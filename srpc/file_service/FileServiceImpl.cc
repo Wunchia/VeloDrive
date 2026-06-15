@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <workflow/mysql_types.h>
+#include <iostream>
 
 using std::string;
 using std::vector;
@@ -43,7 +44,7 @@ void FileServiceImpl::ListFiles(ListFilesReq *request,
 
             response->set_code(0);
             response->set_message("获取文件列表成功");
-
+            std::cout<<"成功获取文件列表"<<std::endl;
             vector<MySQLCell> row;
             while(cursor.fetch_row(row)){
                 auto *file=response->add_files();

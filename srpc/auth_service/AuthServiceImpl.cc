@@ -10,6 +10,7 @@
 #include <workflow/mysql_types.h>
 #include <string>
 #include <vector>
+#include <iostream>
 using std::string;
 using std::vector;
 using namespace protocol;
@@ -56,9 +57,11 @@ void AuthServiceImpl::Register(RegisterReq* request,RegisterResp* response,srpc:
                 response->set_message("注册成功");
                 response->set_user_id(static_cast<int32_t>(cursor.get_insert_id()));
                 response->set_username(username);
+                std::cout<<"注册成功"<<std::endl;
             }else{
                 response->set_code(1);
                 response->set_message("用户名已存在");
+                std::cout<<"注册失败"<<std::endl;
             }
         }
     );
@@ -133,6 +136,7 @@ void AuthServiceImpl::Login(LoginReq*request,LoginResp*response,srpc::RPCContext
             response->set_token_type("Bearer");
             response->set_user_id(db_id);
             response->set_username(db_username);
+            std::cout<<"登录成功"<<std::endl;
         }
     );
     mysql_task->get_req()->set_query(sql);
