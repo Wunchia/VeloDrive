@@ -8,6 +8,7 @@ add_library(velodrive STATIC
     crypto/CryptoUtil.cc
     pb/auth.pb.cc
     pb/file.pb.cc
+    consul/ConsulManager.cc
 )
 
 # 头文件搜索路径
@@ -30,6 +31,7 @@ target_link_libraries(velodrive PUBLIC
     srpc
     snappy
     lz4
+    ppconsul
 )
 
 # 可执行程序

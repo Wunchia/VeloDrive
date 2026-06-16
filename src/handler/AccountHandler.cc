@@ -2,6 +2,7 @@
 #include "CryptoUtil.h"
 #include "auth.pb.h"
 #include "auth.srpc.h"
+#include "ConsulManager.h"
 #include <nlohmann/json.hpp>
 #include <srpc/rpc_basic.h>
 #include <srpc/rpc_context.h>
@@ -82,7 +83,13 @@ void AccountHandler::register_user(const HttpReq *req,HttpResp*resp,SeriesWork*s
     pb_req.set_confirm(confirm);
 
     // 发起异步 sRPC 调用
-    auto *client=new AuthService::SRPCClient("127.0.0.1", 8001);
+    // 从注册中心发现可用的服务
+    auto addr=ConsulManager::getInstance().discover("AuthService");
+    if(addr.port==0){
+        send_error(resp, 500, "服务暂不可用");
+        return;
+    }
+    auto *client=new AuthService::SRPCClient(addr.ip.c_str(), addr.port);
     auto *task=client->create_Register_task(
         [resp,client](RegisterResp *pb_resp,srpc::RPCContext* ctx){
             if(!pb_resp||ctx->get_status_code()!=srpc::RPCStatusOK){
@@ -161,7 +168,12 @@ void AccountHandler::login(const HttpReq *req,HttpResp*resp,SeriesWork*series){
     pb_req.set_username(username);
     pb_req.set_password(password);
 
-    auto *client=new AuthService::SRPCClient("127.0.0.1",8001);
+    auto addr=ConsulManager::getInstance().discover("AuthService");
+    if(addr.port==0){
+        send_error(resp, 500, "服务暂不可用");
+        return;
+    }
+    auto *client=new AuthService::SRPCClient(addr.ip.c_str(),addr.port);
     auto *task=client->create_Login_task(
         [resp,client](LoginResp*pb_resp,srpc::RPCContext* ctx){
             if(!pb_resp||ctx->get_status_code()!=srpc::RPCStatusOK){

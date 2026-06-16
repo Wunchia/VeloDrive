@@ -4,6 +4,7 @@
 #include "MqManager.h"
 #include "file.pb.h"
 #include "file.srpc.h"
+#include "ConsulManager.h"
 #include <nlohmann/json.hpp>
 #include <srpc/rpc_basic.h>
 #include <srpc/rpc_context.h>
@@ -93,7 +94,12 @@ void FileHandler::list_files(const HttpReq *req,HttpResp *resp,SeriesWork*series
     ListFilesReq pb_req;
     pb_req.set_uid(uid);
 
-    auto *client=new FileService::SRPCClient("127.0.0.1",8002);
+    auto addr=ConsulManager::getInstance().discover("FileService");
+    if(addr.port==0){
+        send_error(resp, 500, "服务暂不可用");
+        return;
+    }
+    auto *client=new FileService::SRPCClient(addr.ip.c_str(),addr.port);
     auto *task=client->create_ListFiles_task(
         [resp,client](ListFilesResp*pb_resp,srpc::RPCContext*ctx){
             if(!pb_resp||ctx->get_status_code()!=srpc::RPCStatusOK){

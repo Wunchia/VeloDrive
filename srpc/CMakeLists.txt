@@ -4,6 +4,7 @@ add_executable(auth_service
     auth_service/auth_main.cc
     ${CMAKE_SOURCE_DIR}/src/pb/auth.pb.cc
     ${CMAKE_SOURCE_DIR}/src/crypto/CryptoUtil.cc
+    ${CMAKE_SOURCE_DIR}/src/consul/ConsulManager.cc
 )
 
 target_include_directories(auth_service PRIVATE
@@ -20,6 +21,7 @@ target_link_libraries(auth_service PRIVATE
     jwt
     snappy
     lz4
+    ppconsul
 )
 
 # File Service
@@ -27,6 +29,7 @@ add_executable(file_service
     file_service/FileServiceImpl.cc
     file_service/file_main.cc
     ${CMAKE_SOURCE_DIR}/src/pb/file.pb.cc
+    ${CMAKE_SOURCE_DIR}/src/consul/ConsulManager.cc
 )
 
 target_include_directories(file_service PRIVATE
@@ -42,4 +45,5 @@ target_link_libraries(file_service PRIVATE
     ssl
     snappy
     lz4
+    ppconsul
 )

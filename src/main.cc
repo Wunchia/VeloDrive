@@ -1,6 +1,7 @@
 #include "CloudDiskServer.h"
 #include "OssManager.h"
 #include "MqManager.h"
+#include "ConsulManager.h"
 #include <google/protobuf/stubs/common.h>
 #include <iostream>
 #include <signal.h>
@@ -34,6 +35,9 @@ int main()
 
     //初始化 MQ 单例
     MqManager::getInstance().init();
+
+    //初始化注册中心
+    ConsulManager::getInstance().init();
 
     CloudDiskServer server;
 
